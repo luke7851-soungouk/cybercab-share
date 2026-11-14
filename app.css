@@ -382,7 +382,7 @@
    ========================================================================== */
 .map{touch-action:auto;cursor:default}
 .map.dragging{cursor:default}
-.kakaomap{position:absolute;left:50%;top:50%;width:150%;height:150%;background:#EFEDE6;z-index:0;transform:translate(-50%,-50%) rotate(var(--mrot,0deg)) scale(var(--mscale,1));transform-origin:50% 50%}
+.kakaomap{position:absolute;left:50%;top:50%;width:220%;height:220%;background:#EFEDE6;z-index:0;transform:translate(-50%,-50%) rotate(var(--mrot,0deg)) scale(var(--mscale,1));transform-origin:50% 50%}
 .kakaomap.rot-anim{transition:transform .34s cubic-bezier(.22,.9,.24,1)}
 .kakaomap .wrap_map,.kakaomap *{-webkit-tap-highlight-color:transparent}
 .map-chip,.map-live,.mapexp,.maptype{z-index:8}

@@ -344,10 +344,33 @@ function saveKey() {
   location.reload();
 }
 
+/* 지도 컨테이너를 화면 대각선 길이의 정사각형으로 키움
+   → 45도든 90도든 어떤 각도로 돌려도 모서리에 빈 곳이 생기지 않습니다. */
+function sizeMapLayer() {
+  var wrap = el('mapWrap'), box = el('kakaoMap');
+  if (!wrap || !box) return false;
+  var W = wrap.clientWidth || 480, H = wrap.clientHeight || 939;
+  var side = Math.ceil(Math.sqrt(W * W + H * H)) + 2;
+  if (box.dataset.side === String(side)) return false;
+  box.dataset.side = String(side);
+  box.style.width = side + 'px';
+  box.style.height = side + 'px';
+  return true;
+}
+
+function reloadMapSize() {
+  if (!sizeMapLayer()) return;
+  if (!MAP.ready) return;
+  try { MAP.map.relayout(); } catch (e) {}
+  MAP.sig = '';
+  renderMapLayers(true);
+}
+
 function initMap(key) {
   MAP.key = key;
   var box = el('kakaoMap');
   if (!box) return;
+  sizeMapLayer();
   MAP.map = new kakao.maps.Map(box, { center: ll(PICKUP.lat, PICKUP.lng), level: 5 });
   MAP.map.setMinLevel(2);
   MAP.map.setMaxLevel(9);
@@ -722,7 +745,7 @@ function toggleMapType() { return setMapType(state.mapType === 'skyview' ? 'road
    · 모바일 두 손가락 비틀기(atan2) = 회전, 벌리기/오므리기 = 카카오맵 기본 핀치 줌 그대로. */
 var ROT = {
   deg: 0, on: false, told: false,
-  animT: null, resetT: null, saveT: null, tipT: null, wheelT: null, refitT: null,
+  animT: null, resetT: null, saveT: null, tipT: null, wheelT: null, refitT: null, sizeT: null,
   drag: null, pan: null, pt: null, twist: null, pointers: {}
 };
 
@@ -1010,6 +1033,12 @@ function bindMapRotate() {
 
   /* 데스크톱 휠 줌 (회전 중에만 직접 처리, 0도에서는 카카오맵 기본 동작) */
   box.addEventListener('wheel', onMapWheel, { passive: false });
+
+  /* 창 크기가 바뀌면 회전용 지도 레이어 크기를 다시 잡음 */
+  window.addEventListener('resize', function () {
+    clearTimeout(ROT.sizeT);
+    ROT.sizeT = setTimeout(reloadMapSize, 180);
+  });
 }
 
 /* ---- 장소 키워드 검색 (카카오맵 services.Places) ---- */
