@@ -383,7 +383,7 @@ function buildPickupOverlay() {
   node.className = 'pk-mk';
   node.innerHTML = '<i></i>';
   MAP.pickupOv = new kakao.maps.CustomOverlay({
-    position: ll(PICKUP.lat, PICKUP.lng), content: node, xAnchor: 0.5, yAnchor: 0.5, zIndex: 4
+    position: ll(PICKUP.lat, PICKUP.lng), content: node, xAnchor: 0.5, yAnchor: 0.5, zIndex: 8
   });
   MAP.pickupOv.setMap(MAP.map);
 }
@@ -535,7 +535,7 @@ function renderMapLayers(force) {
   dn.className = 'dst-mk';
   dn.innerHTML = '<div class="dl">' + esc(isKO() ? d.ko : d.en) + '</div><div class="dp"><i></i></div>';
   MAP.destOv = new kakao.maps.CustomOverlay({
-    position: ll(d.lat, d.lng), content: dn, xAnchor: 0.5, yAnchor: 1, zIndex: 6
+    position: ll(d.lat, d.lng), content: dn, xAnchor: 0.5, yAnchor: 1, zIndex: 9
   });
   MAP.destOv.setMap(MAP.map);
 
@@ -580,10 +580,9 @@ function fitRoute(pts, d) {
   var h = (el('mapWrap') && el('mapWrap').clientHeight) || 560;
   var w = (el('mapWrap') && el('mapWrap').clientWidth) || 420;
   var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
-  var bottom = Math.round(h * (1 - vis)) + 10;
-  var side = Math.round(w * 0.14);
+  var bottom = Math.round(h * (1 - vis)) + 8;
   try {
-    MAP.map.setBounds(boundsOf(pts), 54, side, bottom, side);
+    MAP.map.setBounds(boundsOf(pts), 26, 24, bottom, 24);
   } catch (e) {
     try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
   }
@@ -954,7 +953,7 @@ function sheetDone() {
     + '<h2>' + T('목적지에 도착했습니다', 'You have arrived') + '</h2>'
     + '<p>' + esc(isKO() ? d.ko : d.en) + ' · ' + hh + ' ' + T('자동 결제 완료', 'auto-paid') + '</p></div>'
     + '<div class="rcp">'
-    +   '<div class="rrow2"><span>' + T('기본 요금', 'Base fare') + '</span><b>' + wonShort(base) + '</b></div>'
+    +   '<div class="rrow2"><span>' + T('기본 요금', 'Base fare') + '</span><b>' + wonShort(BASE_FARE) + '</b></div>'
     +   '<div class="rrow2"><span>' + T('거리 요금', 'Distance') + ' (' + d.km + 'km × ' + num(PER_KM) + '원)</span><b>' + wonShort(base - BASE_FARE) + '</b></div>';
   if (optAdj !== 0) {
     html += '<div class="rrow2"><span>' + (isKO() ? optObj(ride.optId).ko : optObj(ride.optId).en) + '</span><b>+' + wonShort(optAdj) + '</b></div>';
