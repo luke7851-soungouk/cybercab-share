@@ -442,3 +442,11 @@
 
 /* [hidden] 은 display 선언보다 우선해야 함 */
 [hidden]{display:none !important}
+
+/* ---------- 단계별 시트 높이 (지도가 충분히 보이도록) ---------- */
+.sheet.ph-route{max-height:66%}
+.sheet.ph-search{max-height:52%}
+.sheet.ph-matched{max-height:62%}
+.sheet.ph-riding{max-height:54%}
+.sheet.ph-done{max-height:76%}
+.sheet.big.ph-route,.sheet.big.ph-search,.sheet.big.ph-matched,.sheet.big.ph-riding,.sheet.big.ph-done{max-height:88px}

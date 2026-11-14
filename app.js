@@ -574,17 +574,21 @@ function boundsOf(pts) {
 }
 
 /* 목적지까지 전체 경로가 시트 위쪽 화면에 들어오도록 자동 맞춤 */
+var VISIBLE_MAP = { idle: 0.5, route: 0.34, searching: 0.6, matched: 0.38, riding: 0.54, done: 0.24 };
 function fitRoute(pts, d) {
   if (!MAP.ready) return;
   var h = (el('mapWrap') && el('mapWrap').clientHeight) || 560;
   var w = (el('mapWrap') && el('mapWrap').clientWidth) || 420;
-  var bottom = Math.round(h * (state.mapBig ? 0.08 : 0.44));
+  var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
+  var bottom = Math.round(h * (1 - vis)) + 10;
+  var side = Math.round(w * 0.14);
   try {
-    MAP.map.setBounds(boundsOf(pts), 60, Math.round(w * 0.12), bottom, Math.round(w * 0.12));
+    MAP.map.setBounds(boundsOf(pts), 54, side, bottom, side);
   } catch (e) {
     try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
   }
   MAP.boundsK++;
+  syncZoomUi();
 }
 
 function fitPickup() {
@@ -1027,7 +1031,7 @@ function renderRider() {
   var sh = el('sheet');
   var big = !!state.mapBig;
   var min = !!(state.sheetMin && state.phase === 'idle' && !big);
-  if (sh) sh.className = 'sheet' + (min ? ' min' : '') + (big ? ' big' : '');
+  if (sh) sh.className = 'sheet ph-' + state.phase + (min ? ' min' : '') + (big ? ' big' : '');
   var bf = el('bigFrom'), bt = el('bigTo');
   var d = destObj();
   if (bf) bf.textContent = T(PICKUP.ko, PICKUP.en);
