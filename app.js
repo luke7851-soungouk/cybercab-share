@@ -580,9 +580,11 @@ function fitRoute(pts, d) {
   var h = (el('mapWrap') && el('mapWrap').clientHeight) || 560;
   var w = (el('mapWrap') && el('mapWrap').clientWidth) || 420;
   var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
-  var bottom = Math.round(h * (1 - vis)) + 8;
+  /* 카카오 setBounds 의 상단 패딩이 중심을 어긋나게 만들어서(실측: top>0 이면 경로가 화면 밖으로)
+     하단 패딩만으로 시트 위 가시 영역을 정확히 지정합니다. */
+  var bottom = Math.max(40, Math.round(h * (1 - vis)) - 6);
   try {
-    MAP.map.setBounds(boundsOf(pts), 26, 24, bottom, 24);
+    MAP.map.setBounds(boundsOf(pts), 0, 0, bottom, 0);
   } catch (e) {
     try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
   }
