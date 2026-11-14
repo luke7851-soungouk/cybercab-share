@@ -581,21 +581,28 @@ function updateDot() {
 }
 
 /* 목적지까지 전체 경로가 시트 위쪽 화면에 들어오도록 자동 맞춤.
-   회전을 위해 지도 컨테이너를 150% 로 키워 두었기 때문에(컨테이너가 화면보다 크고 중앙 정렬)
-   setBounds 패딩 대신 투영 좌표로 레벨과 중심을 직접 계산합니다. */
+   지도 컨테이너가 화면보다 크고(회전용 150%) CSS 로 돌아가 있으므로 setBounds 대신
+   투영 좌표를 화면 기준으로 돌려(회전 반영) 레벨과 중심을 직접 계산합니다. */
 var VISIBLE_MAP = { idle: 0.5, route: 0.34, searching: 0.6, matched: 0.38, riding: 0.54, done: 0.24 };
 
-/* 현재 레벨에서 경로가 차지하는 컨테이너 픽셀 영역 */
+/* 현재 레벨·회전에서 경로가 차지하는 화면 픽셀 영역 (컨테이너 중심 기준 회전 반영) */
 function routeBoxPx(pts) {
   var pr = MAP.map.getProjection();
+  var node = MAP.map.getNode();
+  var CW = node.clientWidth, CH = node.clientHeight;
+  var th = normDeg(ROT.deg) * Math.PI / 180;
+  var cos = Math.cos(th), sin = Math.sin(th);
   var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   var all = [[PICKUP.lat, PICKUP.lng]].concat(pts);
   for (var i = 0; i < all.length; i++) {
     var p = pr.containerPointFromCoords(ll(all[i][0], all[i][1]));
-    if (p.x < x0) x0 = p.x;
-    if (p.x > x1) x1 = p.x;
-    if (p.y < y0) y0 = p.y;
-    if (p.y > y1) y1 = p.y;
+    var dx = p.x - CW / 2, dy = p.y - CH / 2;
+    var sx = CW / 2 + dx * cos - dy * sin;
+    var sy = CH / 2 + dx * sin + dy * cos;
+    if (sx < x0) x0 = sx;
+    if (sx > x1) x1 = sx;
+    if (sy < y0) y0 = sy;
+    if (sy > y1) y1 = sy;
   }
   return {
     x0: x0, x1: x1, y0: y0, y1: y1,
@@ -604,33 +611,45 @@ function routeBoxPx(pts) {
   };
 }
 
+/* 경로 중심을 시트 위 가시 영역 한가운데로 (레벨은 그대로) */
+function centerRouteInStrip(pts, visH) {
+  if (!MAP.ready || !pts || !pts.length) return;
+  var node = MAP.map.getNode(), wrap = el('mapWrap');
+  if (!node || !wrap) return;
+  var CH = node.clientHeight, H = wrap.clientHeight || 560;
+  var b = routeBoxPx(pts);
+  /* 경로 중심이 가야 할 화면 위치: 가로 중앙, 세로는 가시 영역 중앙 */
+  var wantX = node.clientWidth / 2;
+  var wantY = (CH - H) / 2 + visH / 2;
+  var th = normDeg(ROT.deg) * Math.PI / 180;
+  var cos = Math.cos(th), sin = Math.sin(th);
+  var dx = b.cx - wantX, dy = b.cy - wantY;
+  var lx = dx * cos + dy * sin;          /* 역회전: 화면 이동량 → 컨테이너 이동량 */
+  var ly = -dx * sin + dy * cos;
+  var pr = MAP.map.getProjection();
+  var cpt = pr.containerPointFromCoords(MAP.map.getCenter());
+  try {
+    MAP.map.setCenter(pr.coordsFromContainerPoint(new kakao.maps.Point(cpt.x + lx, cpt.y + ly)));
+  } catch (e) {}
+}
+
 function fitRoute(pts, d) {
   if (!MAP.ready || !pts || !pts.length) return;
-  var wrap = el('mapWrap'), node = MAP.map.getNode();
-  if (!wrap || !node) return;
+  var wrap = el('mapWrap');
+  if (!wrap) return;
   var H = wrap.clientHeight || 560, W = wrap.clientWidth || 420;
-  var CW = node.clientWidth, CH = node.clientHeight;
-  var k = CH / H;                                      /* 컨테이너 확대 배율 (보통 1.5) */
   var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
-  var visH = Math.max(140, Math.round(H * vis) - 8);    /* 화면에서 지도로 보이는 높이 (화면 px) */
-  var availW = Math.max(80, CW - 28 * k);
-  var availH = Math.max(80, visH * k - 24 * k);
-  /* 1) 지금 레벨에서 경로가 차지하는 픽셀로 필요한 배율을 구해 레벨 결정 (넘침 방지로 올림) */
+  var visH = Math.max(140, Math.round(H * vis) - 8);    /* 지도로 보이는 높이 */
+  var availW = Math.max(80, W - 24);
+  var availH = Math.max(80, visH - 8);
+  /* 1) 경로가 차지하는 픽셀 크기로 필요한 배율 → 레벨 (넘침 방지로 올림) */
   var b0 = routeBoxPx(pts);
   var scale = Math.min(availW / b0.w, availH / b0.h);
   var lv = Math.ceil(MAP.map.getLevel() - Math.log(scale) / Math.LN2);
   lv = Math.max(2, Math.min(9, lv));
   if (lv !== MAP.map.getLevel()) { try { MAP.map.setLevel(lv); } catch (e) {} }
-  /* 2) 새 레벨에서 경로 중심이 시트 위 가시 영역 한가운데 오도록 중심 이동 */
-  var b1 = routeBoxPx(pts);
-  var pr = MAP.map.getProjection();
-  var cpt = pr.containerPointFromCoords(MAP.map.getCenter());
-  var target = new kakao.maps.Point(CW / 2, (CH - H) / 2 + (visH * k) / 2);
-  try {
-    MAP.map.setCenter(pr.coordsFromContainerPoint(
-      new kakao.maps.Point(cpt.x + (b1.cx - target.x), cpt.y + (b1.cy - target.y))
-    ));
-  } catch (e2) {}
+  /* 2) 새 레벨에서 경로 중심을 가시 영역 중앙에 */
+  centerRouteInStrip(pts, visH);
   MAP.boundsK++;
   syncZoomUi();
 }
@@ -703,7 +722,7 @@ function toggleMapType() { return setMapType(state.mapType === 'skyview' ? 'road
    · 모바일 두 손가락 비틀기(atan2) = 회전, 벌리기/오므리기 = 카카오맵 기본 핀치 줌 그대로. */
 var ROT = {
   deg: 0, on: false, told: false,
-  animT: null, resetT: null, saveT: null, tipT: null, wheelT: null,
+  animT: null, resetT: null, saveT: null, tipT: null, wheelT: null, refitT: null,
   drag: null, pan: null, pt: null, twist: null, pointers: {}
 };
 
@@ -770,6 +789,8 @@ function rotateMap(step) {
   setMapRotation(target, true);
   var deg = Math.round(normDeg(target)) % 360;
   showToast(T('지도 ' + deg + '° 회전', 'Map rotated ' + deg + '°'));
+  clearTimeout(ROT.refitT);
+  ROT.refitT = setTimeout(refitAfterRotate, 380);
   if (!ROT.told) {
     ROT.told = true;
     clearTimeout(ROT.tipT);
@@ -791,9 +812,22 @@ function resetMapRotation() {
   /* 가장 짧은 방향으로 0도(정북)까지 부드럽게 복귀 */
   applyRotation(ROT.deg - d, false);
   clearTimeout(ROT.resetT);
-  ROT.resetT = setTimeout(function () { ROT.deg = 0; applyRotation(0, true); }, 380);
+  ROT.resetT = setTimeout(function () { ROT.deg = 0; applyRotation(0, true); refitAfterRotate(); }, 380);
   showToast(T('정북(0°)으로 복귀했습니다', 'Back to north (0°)'));
   return 0;
+}
+
+/* 회전 후 보이는 경로를 가시 영역 안으로 다시 가운데 정렬 (레벨은 유지) */
+function refitAfterRotate() {
+  if (!MAP.ready || state.phase === 'idle') return;
+  var d = destObj();
+  if (!d) return;
+  var pts = (d.path && d.path.length) ? d.path : [[PICKUP.lat, PICKUP.lng], [d.lat, d.lng]];
+  var wrap = el('mapWrap');
+  var H = wrap ? (wrap.clientHeight || 560) : 560;
+  var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
+  var visH = Math.max(140, Math.round(H * vis) - 8);
+  centerRouteInStrip(pts, visH);
 }
 
 /* ---- 회전 제스처: Shift+드래그(데스크톱) · 두 손가락 비틀기(모바일) · 회전 중 팬 ---- */
