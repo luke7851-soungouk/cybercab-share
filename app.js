@@ -86,6 +86,7 @@ const DEFAULT_STATE = {
   sheetMin: false,
   mapBig: false,
   mapType: 'roadmap',
+  rot: 0,
   driving: true,
   autoReturn: true,
   battery: 78,
@@ -373,6 +374,8 @@ function initMap(key) {
   buildCabOverlays();
   setMapType(state.mapType, true);
   syncZoomUi();
+  bindMapRotate();
+  applyRotation(parseInt(state.rot, 10) || 0, true);
   MAP.sig = '';
   renderMapLayers(true);
   startCabTick();
@@ -589,18 +592,20 @@ var VISIBLE_MAP = { idle: 0.5, route: 0.34, searching: 0.6, matched: 0.38, ridin
 function fitRoute(pts, d) {
   if (!MAP.ready) return;
   var h = (el('mapWrap') && el('mapWrap').clientHeight) || 560;
-  var w = (el('mapWrap') && el('mapWrap').clientWidth) || 420;
   var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
+  /* 회전을 위해 지도 컨테이너를 150% 로 키웠으므로 패딩도 같은 배율로 환산합니다 */
+  var k = mapScale();
+  var visPx = h * vis;
   /* 카카오 setBounds 의 상단 패딩이 중심을 어긋나게 만들어서(실측: top>0 이면 경로가 화면 밖으로)
      하단 패딩만으로 시트 위 가시 영역을 정확히 지정합니다. */
-  var bottom = Math.max(40, Math.round(h * (1 - vis)) - 6);
+  var bottom = Math.max(40, Math.round(h - visPx) - 6) * k;
   try {
     MAP.map.setBounds(boundsOf(pts), 0, 0, bottom, 0);
   } catch (e) {
     try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
   }
   MAP.boundsK++;
-  topAlignRoute(pts, Math.min(44, Math.max(0, (h - bottom) * 0.16)), h - bottom);
+  topAlignRoute(pts, Math.min(44, Math.max(0, visPx * 0.16)) * k, visPx * k);
   syncZoomUi();
 }
 
@@ -685,6 +690,298 @@ function setMapType(t, quiet) {
   return state.mapType;
 }
 function toggleMapType() { return setMapType(state.mapType === 'skyview' ? 'roadmap' : 'skyview'); }
+
+/* ---- 지도 360도 회전 ------------------------------------------------
+   카카오맵 JavaScript SDK 의 지도는 래스터 타일이라 bearing(회전) API 가 없습니다.
+   그래서 지도 컨테이너(#kakaoMap) 자체를 CSS 로 돌리고, 그 위에 얹히는
+   커스텀 오버레이(차량 도착 배지·목적지 핀)는 -angle 로 역회전해 똑바로 보이게 합니다.
+   · 컨테이너는 CSS 에서 150% 크기 + 중앙 정렬이라 45/90/180도 어디서도 모서리가 비지 않습니다.
+   · 회전 중에는 카카오맵 드래그를 끄고 화면 좌표 기준으로 직접 팬을 처리해
+     드래그 방향이 회전 각도와 어긋나지 않습니다.
+   · 모바일 두 손가락 비틀기(atan2) = 회전, 벌리기/오므리기 = 카카오맵 기본 핀치 줌 그대로. */
+var ROT = {
+  deg: 0, on: false, told: false,
+  animT: null, resetT: null, saveT: null, tipT: null, wheelT: null,
+  drag: null, pan: null, pt: null, twist: null, pointers: {}
+};
+
+function normDeg(d) { return ((d % 360) + 360) % 360; }
+function signedDeg(d) { return ((d % 360) + 540) % 360 - 180; }
+function isRotated() { return Math.abs(signedDeg(ROT.deg)) > 0.05; }
+function saveSoon() { clearTimeout(ROT.saveT); ROT.saveT = setTimeout(function () { save(); }, 400); }
+function mapScale() {
+  var n = (MAP.ready && MAP.map) ? MAP.map.getNode() : null;
+  var w = el('mapWrap');
+  if (!n || !w || !w.clientHeight) return 1;
+  return Math.max(1, n.clientHeight / w.clientHeight);
+}
+
+function updateRotUI() {
+  var deg = Math.round(normDeg(ROT.deg)) % 360;
+  var lab = el('rotLabel'); if (lab) lab.textContent = deg + '\u00b0';
+  var nd = el('rotNeedle');
+  if (nd) nd.style.transform = 'rotate(' + normDeg(ROT.deg).toFixed(1) + 'deg)';
+  var cp = el('rotCompass'); if (cp) cp.classList.toggle('on', deg !== 0);
+  var wr = el('mapWrap'); if (wr) wr.classList.toggle('rotated', deg !== 0);
+}
+
+function applyRotation(deg, instant) {
+  ROT.deg = deg;
+  var d = normDeg(deg);
+  var box = el('kakaoMap');
+  if (box) {
+    box.style.setProperty('--mrot', d.toFixed(2) + 'deg');
+    if (instant) { box.classList.remove('rot-anim'); clearTimeout(ROT.animT); }
+    else {
+      box.classList.add('rot-anim');
+      clearTimeout(ROT.animT);
+      ROT.animT = setTimeout(function () { box.classList.remove('rot-anim'); }, 380);
+    }
+  }
+  var wrap = el('mapWrap');
+  if (wrap) {
+    wrap.style.setProperty('--mrot', d.toFixed(2) + 'deg');
+    wrap.style.setProperty('--mneg', (-d).toFixed(2) + 'deg');
+  }
+  var on = isRotated();
+  if (on !== ROT.on) {
+    ROT.on = on;
+    /* 회전 중에는 카카오맵의 기본 드래그·휠·핀치를 꺼 둡니다.
+       (래스터 회전 상태에서는 SDK 가 마우스·터치 좌표를 화면 기준으로 되돌리지 못해
+        엉뚱한 지점을 중심으로 줌이 일어나기 때문입니다. 회전 중 팬/줌은 아래에서 직접 처리) */
+    if (MAP.ready) {
+      try { MAP.map.setDraggable(!on); } catch (e) {}
+      try { MAP.map.setZoomable(!on); } catch (e) {}
+    }
+    if (box) box.style.setProperty('--mscale', 1);
+  }
+  state.rot = Math.round(d) % 360;
+  updateRotUI();
+  saveSoon();
+  return ROT.deg;
+}
+
+function setMapRotation(deg, animate) {
+  clearTimeout(ROT.resetT); ROT.resetT = null;
+  return applyRotation(deg, !animate);
+}
+
+function rotateMap(step) {
+  if (!MAP.ready) { showToast(T('지도를 먼저 켜 주세요', 'Turn the map on first')); return 0; }
+  var s = (typeof step === 'number' && step) ? step : 45;
+  /* 45도 단위로 스냅해서 버튼을 여러 번 눌러도 각도가 어긋나지 않게 */
+  var base = (Math.abs(s) === 45) ? Math.round(ROT.deg / 45) * 45 : ROT.deg;
+  var target = base + s;
+  setMapRotation(target, true);
+  var deg = Math.round(normDeg(target)) % 360;
+  showToast(T('지도 ' + deg + '° 회전', 'Map rotated ' + deg + '°'));
+  if (!ROT.told) {
+    ROT.told = true;
+    clearTimeout(ROT.tipT);
+    ROT.tipT = setTimeout(function () {
+      showToast(T('두 손가락으로 비틀거나 Shift+드래그로도 돌릴 수 있어요', 'Twist with two fingers or Shift+drag to rotate'));
+    }, 1700);
+  }
+  return deg;
+}
+
+function resetMapRotation() {
+  if (!MAP.ready) { showToast(T('지도를 먼저 켜 주세요', 'Turn the map on first')); return 0; }
+  var d = signedDeg(ROT.deg);
+  if (Math.abs(d) < 0.5) {
+    applyRotation(0, true);
+    showToast(T('이미 정북(0°)입니다', 'Already facing north (0°)'));
+    return 0;
+  }
+  /* 가장 짧은 방향으로 0도(정북)까지 부드럽게 복귀 */
+  applyRotation(ROT.deg - d, false);
+  clearTimeout(ROT.resetT);
+  ROT.resetT = setTimeout(function () { ROT.deg = 0; applyRotation(0, true); }, 380);
+  showToast(T('정북(0°)으로 복귀했습니다', 'Back to north (0°)'));
+  return 0;
+}
+
+/* ---- 회전 제스처: Shift+드래그(데스크톱) · 두 손가락 비틀기(모바일) · 회전 중 팬 ---- */
+function pairAngle(t1, t2) {
+  return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * 180 / Math.PI;
+}
+function mapCenterPoint() {
+  var n = MAP.map.getNode();
+  return new kakao.maps.Point(Math.round(n.clientWidth / 2), Math.round(n.clientHeight / 2));
+}
+
+/* 화면 좌표 이동량을 회전 각도만큼 되돌려 지도 컨테이너 좌표로 바꿉니다 */
+function panScreen(dx, dy) {
+  if (!MAP.ready || !ROT.pt) return;
+  var th = normDeg(ROT.deg) * Math.PI / 180;
+  var cos = Math.cos(th), sin = Math.sin(th);
+  var lx = dx * cos + dy * sin;
+  var ly = -dx * sin + dy * cos;
+  ROT.pt.x -= lx; ROT.pt.y -= ly;
+  try {
+    MAP.map.setCenter(MAP.map.getProjection().coordsFromContainerPoint(ROT.pt));
+  } catch (e) {}
+}
+
+function onPanDown(e) {
+  ROT.pointers[e.pointerId] = 1;
+  if (Object.keys(ROT.pointers).length > 1) { ROT.pan = null; return; }   /* 핀치 중에는 팬 금지 */
+  if (!MAP.ready || !isRotated()) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  ROT.pan = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  ROT.pt = mapCenterPoint();
+}
+function onPanMove(e) {
+  if (!ROT.pan || ROT.pan.id !== e.pointerId) return;
+  var dx = e.clientX - ROT.pan.x, dy = e.clientY - ROT.pan.y;
+  if (!dx && !dy) return;
+  ROT.pan.x = e.clientX; ROT.pan.y = e.clientY;
+  panScreen(dx, dy);
+}
+function onPanUp(e) {
+  delete ROT.pointers[e.pointerId];
+  if (ROT.pan && ROT.pan.id === e.pointerId) { ROT.pan = null; ROT.pt = null; saveSoon(); }
+}
+
+function onShiftRotDown(e) {
+  if (!e.shiftKey || !MAP.ready) return;
+  var t = e.target;
+  if (t && t.closest && t.closest('button,.mbtn,.mcmp,.mapctl,.cabpop,.sheet')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  clearTimeout(ROT.resetT); ROT.resetT = null;
+  ROT.drag = { x: e.clientX, deg0: ROT.deg };
+  var w = el('mapWrap'); if (w) w.classList.add('dragging');
+}
+function onShiftRotMove(e) {
+  if (!ROT.drag) return;
+  e.preventDefault();
+  e.stopPropagation();
+  applyRotation(ROT.drag.deg0 + (e.clientX - ROT.drag.x) * 0.55, true);
+}
+function onShiftRotUp() {
+  if (!ROT.drag) return;
+  ROT.drag = null;
+  var w = el('mapWrap'); if (w) w.classList.remove('dragging');
+  saveSoon();
+}
+
+function onTwistStart(e) {
+  if (!e.touches || e.touches.length !== 2) { ROT.twist = null; return; }
+  clearTimeout(ROT.resetT); ROT.resetT = null;
+  ROT.pan = null;
+  var t1 = e.touches[0], t2 = e.touches[1];
+  var d0 = Math.max(1, Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY));
+  ROT.twist = {
+    a0: pairAngle(t1, t2), deg0: ROT.deg,
+    d0: d0, lv0: MAP.ready ? MAP.map.getLevel() : 5, ratio: 1
+  };
+}
+function onTwistMove(e) {
+  if (!ROT.twist || !e.touches || e.touches.length < 2) return;
+  var t1 = e.touches[0], t2 = e.touches[1];
+  var a = pairAngle(t1, t2);
+  applyRotation(ROT.twist.deg0 + signedDeg(a - ROT.twist.a0), true);
+  if (!isRotated() || !MAP.ready) return;
+  /* 손가락을 벌리면 확대, 오므리면 축소 — 회전 중에는 SDK 핀치가 꺼져 있어
+     CSS 배율로 부드럽게 보여 주고, 손을 띄면 실제 지도 레벨로 반영합니다. */
+  var d = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  if (!ROT.twist.scaling) {
+    /* 0도에서 시작해 돌리기 시작한 순간 기준을 잡아 배율이 튀지 않게 */
+    ROT.twist.scaling = true;
+    ROT.twist.d0 = Math.max(1, d);
+    ROT.twist.lv0 = MAP.map.getLevel();
+    ROT.twist.ratio = 1;
+  }
+  var ratio = Math.max(0.5, Math.min(2, d / ROT.twist.d0));
+  ROT.twist.ratio = ratio;
+  var box = el('kakaoMap');
+  if (box) box.style.setProperty('--mscale', ratio.toFixed(3));
+}
+function onTwistEnd(e) {
+  if (e.touches && e.touches.length >= 2) return;
+  if (!ROT.twist) return;
+  var t = ROT.twist;
+  ROT.twist = null;
+  if (MAP.ready && isRotated() && Math.abs((t.ratio || 1) - 1) > 0.01) {
+    var lv = Math.round(t.lv0 - Math.log(t.ratio) / Math.LN2);
+    lv = Math.max(2, Math.min(9, lv));
+    try { MAP.map.setLevel(lv); } catch (e2) {}
+    var box = el('kakaoMap');
+    if (box) box.style.setProperty('--mscale', 1);
+    syncZoomUi();
+  } else if (isRotated()) {
+    var b2 = el('kakaoMap');
+    if (b2) b2.style.setProperty('--mscale', 1);
+  }
+  saveSoon();
+}
+
+/* 회전 중 휠 줌 — 회전 각도를 풀어 화면에서 손가락·커서 아래 지점을 고정시킵니다 */
+function zoomAtScreen(clientX, clientY, dir) {
+  if (!MAP.ready) return;
+  var wrap = el('mapWrap');
+  if (!wrap) return;
+  var r = wrap.getBoundingClientRect();
+  var n = MAP.map.getNode();
+  var W = n.clientWidth, H = n.clientHeight;
+  var ax = clientX - (r.left + r.width / 2);
+  var ay = clientY - (r.top + r.height / 2);
+  var th = normDeg(ROT.deg) * Math.PI / 180;
+  var cos = Math.cos(th), sin = Math.sin(th);
+  var q = new kakao.maps.Point(W / 2 + (ax * cos + ay * sin), H / 2 + (-ax * sin + ay * cos));
+  if (!MAP.map) return;
+  var lv = Math.max(2, Math.min(9, MAP.map.getLevel() + dir));
+  if (lv === MAP.map.getLevel()) return;
+  try {
+    var pr0 = MAP.map.getProjection();
+    var g = pr0.coordsFromContainerPoint(q);
+    MAP.map.setLevel(lv);
+    var pr = MAP.map.getProjection();
+    var q2 = pr.containerPointFromCoords(g);
+    var cpt = pr.containerPointFromCoords(MAP.map.getCenter());
+    MAP.map.setCenter(pr.coordsFromContainerPoint(new kakao.maps.Point(cpt.x + (q2.x - q.x), cpt.y + (q2.y - q.y))));
+  } catch (e) {}
+  syncZoomUi();
+  saveSoon();
+}
+function onMapWheel(e) {
+  if (!MAP.ready || !isRotated()) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var d = e.deltaY || -e.wheelDelta || 0;
+  if (!d) return;
+  clearTimeout(ROT.wheelT);
+  ROT.wheelT = setTimeout(function () {
+    zoomAtScreen(e.clientX, e.clientY, d > 0 ? 1 : -1);
+  }, 40);
+}
+
+function bindMapRotate() {
+  var box = el('kakaoMap'), wrap = el('mapWrap');
+  if (!box || !wrap || wrap.dataset.rotBound) return;
+  wrap.dataset.rotBound = '1';
+
+  /* 데스크톱: Shift + 드래그로 회전 (캡처 단계에서 막아 카카오맵 드래그와 겹치지 않게) */
+  wrap.addEventListener('mousedown', onShiftRotDown, true);
+  document.addEventListener('mousemove', onShiftRotMove, true);
+  document.addEventListener('mouseup', onShiftRotUp, true);
+
+  /* 회전 중일 때만 화면 기준 팬 (카카오맵 드래그는 applyRotation 에서 꺼 둡니다) */
+  box.addEventListener('pointerdown', onPanDown, false);
+  box.addEventListener('pointermove', onPanMove, false);
+  document.addEventListener('pointerup', onPanUp, true);
+  document.addEventListener('pointercancel', onPanUp, true);
+
+  /* 모바일: 두 손가락 비틀기 + 벌리기 — 회전 중에는 카카오맵 핀치가 꺼져 있으므로 직접 처리 */
+  wrap.addEventListener('touchstart', onTwistStart, { passive: true, capture: true });
+  wrap.addEventListener('touchmove', onTwistMove, { passive: true, capture: true });
+  wrap.addEventListener('touchend', onTwistEnd, { passive: true, capture: true });
+  wrap.addEventListener('touchcancel', onTwistEnd, { passive: true, capture: true });
+
+  /* 데스크톱 휠 줌 (회전 중에만 직접 처리, 0도에서는 카카오맵 기본 동작) */
+  box.addEventListener('wheel', onMapWheel, { passive: false });
+}
 
 /* ---- 장소 키워드 검색 (카카오맵 services.Places) ---- */
 function searchPlaces(q, cb) {
@@ -1556,6 +1853,8 @@ function resetAll() {
   cabPopId = null;
   state = clone(DEFAULT_STATE);
   MAP.sig = '';
+  ROT.told = false;
+  applyRotation(0, true);
   save();
   renderAll();
   showToast(T('처음 상태로 되돌렸습니다', 'Reset to the first screen'));
@@ -1599,6 +1898,11 @@ if (window.pickle && window.pickle.widget) {
       if (b === 'big' || b === 'large' || b === 'expand' || b === 'on') setMapBig(true);
       else if (b === 'small' || b === 'shrink' || b === 'collapse' || b === 'off') setMapBig(false);
       else setMapBig(!state.mapBig);
+    } else if (a === 'rotate' || a === 'bearing') {
+      if (!b || b === 'reset' || b === 'north' || b === '0') resetMapRotation();
+      else if (b === 'left' || b === 'ccw' || b === '-') rotateMap(-45);
+      else if (b === 'right' || b === 'cw' || b === '+') rotateMap(45);
+      else if (!isNaN(parseFloat(b))) setMapRotation(parseFloat(b), true);
     } else if (a === 'sky' || a === 'satellite') setMapType('skyview');
     else if (a === 'road') setMapType('roadmap');
     else if (a === 'reset') resetAll();
@@ -1623,6 +1927,8 @@ function boot() {
   state.phase = state.dest ? 'route' : 'idle';
   var cv = el('carVisual');
   if (cv) cv.innerHTML = carBodySvg();
+  if (typeof state.rot !== 'number' || !isFinite(state.rot)) state.rot = 0;
+  applyRotation(state.rot || 0, true);
   renderAll();
   bootMap();
 }

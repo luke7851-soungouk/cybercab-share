@@ -382,7 +382,8 @@
    ========================================================================== */
 .map{touch-action:auto;cursor:default}
 .map.dragging{cursor:default}
-.kakaomap{position:absolute;inset:0;background:#EFEDE6;z-index:0}
+.kakaomap{position:absolute;left:50%;top:50%;width:150%;height:150%;background:#EFEDE6;z-index:0;transform:translate(-50%,-50%) rotate(var(--mrot,0deg)) scale(var(--mscale,1));transform-origin:50% 50%}
+.kakaomap.rot-anim{transition:transform .34s cubic-bezier(.22,.9,.24,1)}
 .kakaomap .wrap_map,.kakaomap *{-webkit-tap-highlight-color:transparent}
 .map-chip,.map-live,.mapexp,.maptype{z-index:8}
 
@@ -418,7 +419,7 @@
 .cabmk-rot{position:absolute;inset:0;display:grid;place-items:center;transition:transform .3s linear}
 .cabmk-body{width:27px;height:27px;border-radius:9px;background:#191919;display:grid;place-items:center;box-shadow:0 3px 10px rgba(0,0,0,.3),0 0 0 2px rgba(255,255,255,.85)}
 .cabmk-body svg{width:15px;height:15px;display:block}
-.cabmk-eta{position:absolute;left:50%;top:-11px;transform:translateX(-50%);background:#fff;color:#191919;border-radius:999px;padding:2px 7px;font-size:9px;font-weight:900;line-height:1.35;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.2)}
+.cabmk-eta{position:absolute;left:50%;top:-11px;transform:translateX(-50%) rotate(var(--mneg,0deg));background:#fff;color:#191919;border-radius:999px;padding:2px 7px;font-size:9px;font-weight:900;line-height:1.35;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.2)}
 .cabmk.mine .cabmk-body{background:#191919;box-shadow:0 3px 10px rgba(0,0,0,.3),0 0 0 2px #FFE812}
 .cabmk.dim{opacity:.5}
 .cabmk.assigned .cabmk-body{background:#2C7BFF;box-shadow:0 3px 10px rgba(44,123,255,.45),0 0 0 2px #fff}
@@ -429,7 +430,7 @@
 .pk-mk.pulse{animation:pkp 1.6s ease-out infinite}
 @keyframes pkp{0%{box-shadow:0 0 0 0 rgba(44,123,255,.42)}70%{box-shadow:0 0 0 16px rgba(44,123,255,0)}100%{box-shadow:0 0 0 0 rgba(44,123,255,0)}}
 
-.dst-mk{position:relative;display:flex;flex-direction:column;align-items:center;transform:translateY(-2px)}
+.dst-mk{position:relative;display:flex;flex-direction:column;align-items:center;transform:translateY(-2px) rotate(var(--mneg,0deg));transform-origin:50% 100%}
 .dst-mk .dp{width:22px;height:22px;border-radius:50% 50% 50% 0;background:#191919;transform:rotate(-45deg);display:grid;place-items:center;box-shadow:0 3px 10px rgba(0,0,0,.3)}
 .dst-mk .dp i{width:7px;height:7px;border-radius:50%;background:#FFE812;transform:rotate(45deg);display:block}
 .dst-mk .dl{position:absolute;top:-17px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#fff;color:#191919;border-radius:999px;padding:2px 8px;font-size:9.5px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,.18)}
@@ -450,3 +451,22 @@
 .sheet.ph-riding{max-height:54%}
 .sheet.ph-done{max-height:76%}
 .sheet.big.ph-route,.sheet.big.ph-search,.sheet.big.ph-matched,.sheet.big.ph-riding,.sheet.big.ph-done{max-height:88px}
+
+/* ==========================================================================
+   지도 360도 회전 (나침반·회전 버튼·두 손가락 비틀기)
+   · 카카오맵 타일은 래스터라 네이티브 회전이 없어서 컨테이너를 CSS 로 돌립니다.
+   · 컨테이너는 150% 크기로 키워 두어 어떤 각도에서도 모서리에 빈 곳이 없습니다.
+   · 지도 위에 얹히는 마커 배지·도착 핀은 역회전(--mneg)해 화면에서 똑바로 보입니다.
+   ========================================================================== */
+.map{--mrot:0deg;--mneg:0deg}
+.map.rotated .kakaomap{cursor:grab}
+.map.rotated.dragging .kakaomap{cursor:grabbing}
+.map.rotated .kakaomap,.map.rotated .kakaomap *{touch-action:none !important}
+
+/* 회전 컨트롤 (확대·현위치 바 앞에 붙는 나침반 그룹) */
+.mcmp{display:flex;align-items:center;gap:4px;height:36px;padding:0 9px;background:#fff;border-left:1px solid #F0F0F0;font-size:10px;font-weight:900;color:#191919;letter-spacing:-.02em;transition:background .16s}
+.mcmp b{min-width:26px;text-align:center;font-variant-numeric:tabular-nums}
+.mcmp svg{width:15px;height:15px;display:block;transition:transform .18s linear}
+.mcmp.on{background:#FFF6BF}
+.mcmp:active{background:#F1F1F1}
+.mcmp + .mbtn{border-left:1px solid #F0F0F0}
