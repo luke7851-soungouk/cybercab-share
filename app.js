@@ -663,7 +663,7 @@ function searchPlaces(q, cb) {
           cat: p.category_name ? String(p.category_name).split('>').pop().trim() : ''
         };
       }));
-    }, { location: ll(PICKUP.lat, PICKUP.lng), sort: kakao.maps.services.SortBy.DISTANCE });
+    }, {});
   } catch (e) { cb([]); }
 }
 
