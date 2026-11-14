@@ -1043,8 +1043,8 @@ function kakaoCardHtml(d) {
     +   '<a class="kx-b alt" href="' + kakaoMapUrl(d.id) + '" rel="noopener noreferrer" onclick="return openExt(this)">🗺 ' + T('카카오맵 길찾기', 'KakaoMap route') + '</a>'
     + '</div>'
     + '<div class="kx-n">'
-    +   T('카카오 T는 목적지 자동 입력을 지원하지 않아, 앱에서 <b>' + nm + '</b>을(를) 검색해 호출해야 합니다. 앱이 없으면 <a href="' + KAKAO_T_STORE + '" rel="noopener noreferrer" onclick="return openExt(this)">스토어에서 설치</a>.',
-        'Kakao T cannot prefill a destination: search <b>' + nm + '</b> in the app. <a href="' + KAKAO_T_STORE + '" rel="noopener noreferrer" onclick="return openExt(this)">Get the app</a> if missing.')
+    +   T('카카오 T는 목적지 자동 입력을 지원하지 않아, 앱에서 <b>' + nm + '</b> 검색 후 호출해 주세요. 앱이 없으면 <a href="' + KAKAO_T_STORE + '" rel="noopener noreferrer" onclick="return openExt(this)">스토어에서 설치</a>.',
+        'Kakao T cannot prefill a destination: search <b>' + nm + '</b> in the app, then call. <a href="' + KAKAO_T_STORE + '" rel="noopener noreferrer" onclick="return openExt(this)">Get the app</a> if missing.')
     + '</div>'
     + '</div>';
 }
