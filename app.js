@@ -360,6 +360,14 @@ function initMap(key) {
     if (Date.now() - cabTapAt < 400) return;   /* 차량 마커 탭이 지도 클릭으로 올라오는 것 방지 */
     if (cabPopId) { cabPopId = null; renderCabPop(); }
   });
+  /* 카카오맵이 지도 드래그용으로 포인터를 가로채는 경우에도 마커 탭이 먹도록
+     클릭 지점에서 마커를 직접 찾아 처리합니다. */
+  document.addEventListener('click', function (ev) {
+    if (!MAP.ready || state.mode !== 'rider') return;
+    var top = document.elementFromPoint(ev.clientX, ev.clientY);
+    var mk = top && top.closest ? top.closest('.cabmk') : null;
+    if (mk && mk.getAttribute('data-cab')) tapCab(mk.getAttribute('data-cab'));
+  }, true);
 
   buildPickupOverlay();
   buildCabOverlays();
@@ -442,13 +450,11 @@ function buildCabOverlays() {
 
     var node = document.createElement('div');
     node.className = 'cabmk' + (c.mine ? ' mine' : '');
+    node.setAttribute('data-cab', c.id);
     node.innerHTML = '<div class="cabmk-eta">' + c.eta + T('분', 'm') + '</div>'
       + '<div class="cabmk-rot"><div class="cabmk-body">'
       + '<svg viewBox="-10 -10 20 20" xmlns="http://www.w3.org/2000/svg">' + cabTopSvg('#FFE812') + '</svg>'
       + '</div></div>';
-    node.addEventListener('click', (function (id) {
-      return function (ev) { if (ev && ev.stopPropagation) ev.stopPropagation(); tapCab(id); };
-    })(c.id));
 
     var ov = new kakao.maps.CustomOverlay({
       position: ll(pts[0][0], pts[0][1]), content: node, xAnchor: 0.5, yAnchor: 0.5,
@@ -501,6 +507,7 @@ function updateCabVisibility() {
     var assigned = !!(ride && ride.car && ride.car.id === c.id &&
       (state.phase === 'matched' || state.phase === 'riding' || state.phase === 'done'));
     h.node.className = 'cabmk' + (c.mine ? ' mine' : '') + (state.phase === 'route' ? ' dim' : '') + (assigned ? ' assigned' : '');
+    h.node.setAttribute('data-cab', c.id);
   }
 }
 
