@@ -926,20 +926,29 @@ function onTwistStart(e) {
   var d0 = Math.max(1, Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY));
   ROT.twist = {
     a0: pairAngle(t1, t2), deg0: ROT.deg,
-    d0: d0, lv0: MAP.ready ? MAP.map.getLevel() : 5, ratio: 1
+    d0: d0, lv0: MAP.ready ? MAP.map.getLevel() : 5, ratio: 1, active: false
   };
 }
 function onTwistMove(e) {
   if (!ROT.twist || !e.touches || e.touches.length < 2) return;
   var t1 = e.touches[0], t2 = e.touches[1];
   var a = pairAngle(t1, t2);
-  applyRotation(ROT.twist.deg0 + signedDeg(a - ROT.twist.a0), true);
+  var da = signedDeg(a - ROT.twist.a0);
+  /* 0도에서 핀치만 할 때 손가락 떨림으로 미세 회전이 들어가 SDK 핀치를 끄지 않도록
+     살짤의 각도(4도)를 넘었을 때만 회전을 시작합니다. */
+  if (!ROT.twist.active) {
+    if (Math.abs(da) < 4) return;
+    ROT.twist.active = true;
+    ROT.twist.a0 = a;
+    ROT.twist.deg0 = ROT.deg;
+    da = 0;
+  }
+  applyRotation(ROT.twist.deg0 + da, true);
   if (!isRotated() || !MAP.ready) return;
   /* 손가락을 벌리면 확대, 오므리면 축소 — 회전 중에는 SDK 핀치가 꺼져 있어
      CSS 배율로 부드럽게 보여 주고, 손을 띄면 실제 지도 레벨로 반영합니다. */
   var d = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
   if (!ROT.twist.scaling) {
-    /* 0도에서 시작해 돌리기 시작한 순간 기준을 잡아 배율이 튀지 않게 */
     ROT.twist.scaling = true;
     ROT.twist.d0 = Math.max(1, d);
     ROT.twist.lv0 = MAP.map.getLevel();
@@ -1003,10 +1012,10 @@ function onMapWheel(e) {
   e.stopPropagation();
   var d = e.deltaY || -e.wheelDelta || 0;
   if (!d) return;
-  clearTimeout(ROT.wheelT);
-  ROT.wheelT = setTimeout(function () {
-    zoomAtScreen(e.clientX, e.clientY, d > 0 ? 1 : -1);
-  }, 40);
+  var now = Date.now();
+  if (ROT.wheelAt && now - ROT.wheelAt < 110) return;   /* 너무 빠른 연속 줌 방지 */
+  ROT.wheelAt = now;
+  zoomAtScreen(e.clientX, e.clientY, d > 0 ? 1 : -1);
 }
 
 function bindMapRotate() {
@@ -1025,11 +1034,11 @@ function bindMapRotate() {
   document.addEventListener('pointerup', onPanUp, true);
   document.addEventListener('pointercancel', onPanUp, true);
 
-  /* 모바일: 두 손가락 비틀기 + 벌리기 — 회전 중에는 카카오맵 핀치가 꺼져 있으므로 직접 처리 */
-  wrap.addEventListener('touchstart', onTwistStart, { passive: true, capture: true });
-  wrap.addEventListener('touchmove', onTwistMove, { passive: true, capture: true });
-  wrap.addEventListener('touchend', onTwistEnd, { passive: true, capture: true });
-  wrap.addEventListener('touchcancel', onTwistEnd, { passive: true, capture: true });
+  /* 모바일: 두 손가락 비틀기 + 벌리기 — 지도 영역 터치만 (시트 스크롤과 섞이지 않게) */
+  box.addEventListener('touchstart', onTwistStart, { passive: true, capture: true });
+  box.addEventListener('touchmove', onTwistMove, { passive: true, capture: true });
+  box.addEventListener('touchend', onTwistEnd, { passive: true, capture: true });
+  box.addEventListener('touchcancel', onTwistEnd, { passive: true, capture: true });
 
   /* 데스크톱 휠 줌 (회전 중에만 직접 처리, 0도에서는 카카오맵 기본 동작) */
   box.addEventListener('wheel', onMapWheel, { passive: false });
