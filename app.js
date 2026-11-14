@@ -110,6 +110,7 @@ var state = clone(DEFAULT_STATE);
 var ride = null;
 var timers = [];
 var cabPopId = null;
+var cabTapAt = 0;
 var toastTimer = null;
 var cabTimer = null;
 var searchTimer = null;
@@ -355,7 +356,10 @@ function initMap(key) {
   el('mapTypeBtn').hidden = false;
 
   kakao.maps.event.addListener(MAP.map, 'zoom_changed', function () { syncZoomUi(); save(); });
-  kakao.maps.event.addListener(MAP.map, 'click', function () { if (cabPopId) { cabPopId = null; renderCabPop(); } });
+  kakao.maps.event.addListener(MAP.map, 'click', function () {
+    if (Date.now() - cabTapAt < 400) return;   /* 차량 마커 탭이 지도 클릭으로 올라오는 것 방지 */
+    if (cabPopId) { cabPopId = null; renderCabPop(); }
+  });
 
   buildPickupOverlay();
   buildCabOverlays();
@@ -1112,6 +1116,7 @@ function renderCabPop() {
 }
 
 function tapCab(id) {
+  cabTapAt = Date.now();
   cabPopId = (cabPopId === id) ? null : id;
   renderCabPop();
 }
