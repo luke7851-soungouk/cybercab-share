@@ -1539,6 +1539,12 @@ function renderLang() {
   if (pn) pn.textContent = T(PICKUP.ko, PICKUP.en);
   var mt = el('mapTypeLabel');
   if (mt) mt.textContent = state.mapType === 'skyview' ? T('일반지도', 'Road map') : T('스카이뷰', 'Skyview');
+  /* 지도 위 차량 도착 배지도 언어를 따라갑니다 */
+  for (var j = 0; j < CABS.length; j++) {
+    var h = MAP.cabs[CABS[j].id];
+    var tag = h && h.node ? h.node.querySelector('.cabmk-eta') : null;
+    if (tag) tag.textContent = CABS[j].eta + T('분', 'm');
+  }
   try { document.documentElement.lang = isKO() ? 'ko' : 'en'; } catch (e) {}
 }
 
