@@ -580,57 +580,59 @@ function updateDot() {
   MAP.dot.setPosition(ll(p.lat, p.lng));
 }
 
-function boundsOf(pts) {
-  var b = new kakao.maps.LatLngBounds();
-  b.extend(ll(PICKUP.lat, PICKUP.lng));
-  for (var i = 0; i < pts.length; i++) b.extend(ll(pts[i][0], pts[i][1]));
-  return b;
-}
-
-/* 목적지까지 전체 경로가 시트 위쪽 화면에 들어오도록 자동 맞춤 */
+/* 목적지까지 전체 경로가 시트 위쪽 화면에 들어오도록 자동 맞춤.
+   회전을 위해 지도 컨테이너를 150% 로 키워 두었기 때문에(컨테이너가 화면보다 크고 중앙 정렬)
+   setBounds 패딩 대신 투영 좌표로 레벨과 중심을 직접 계산합니다. */
 var VISIBLE_MAP = { idle: 0.5, route: 0.34, searching: 0.6, matched: 0.38, riding: 0.54, done: 0.24 };
-function fitRoute(pts, d) {
-  if (!MAP.ready) return;
-  var h = (el('mapWrap') && el('mapWrap').clientHeight) || 560;
-  var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
-  /* 회전을 위해 지도 컨테이너를 150% 로 키웠으므로 패딩도 같은 배율로 환산합니다 */
-  var k = mapScale();
-  var visPx = h * vis;
-  /* 카카오 setBounds 의 상단 패딩이 중심을 어긋나게 만들어서(실측: top>0 이면 경로가 화면 밖으로)
-     하단 패딩만으로 시트 위 가시 영역을 정확히 지정합니다. */
-  var bottom = Math.max(40, Math.round(h - visPx) - 6) * k;
-  try {
-    MAP.map.setBounds(boundsOf(pts), 0, 0, bottom, 0);
-  } catch (e) {
-    try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
+
+/* 현재 레벨에서 경로가 차지하는 컨테이너 픽셀 영역 */
+function routeBoxPx(pts) {
+  var pr = MAP.map.getProjection();
+  var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  var all = [[PICKUP.lat, PICKUP.lng]].concat(pts);
+  for (var i = 0; i < all.length; i++) {
+    var p = pr.containerPointFromCoords(ll(all[i][0], all[i][1]));
+    if (p.x < x0) x0 = p.x;
+    if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.y > y1) y1 = p.y;
   }
-  MAP.boundsK++;
-  topAlignRoute(pts, Math.min(44, Math.max(0, visPx * 0.16)) * k, visPx * k);
-  syncZoomUi();
+  return {
+    x0: x0, x1: x1, y0: y0, y1: y1,
+    cx: (x0 + x1) / 2, cy: (y0 + y1) / 2,
+    w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0)
+  };
 }
 
-/* setBounds 결과가 화면 맨 위에 붙는 경우가 있어, 경로가 위쪽 여백 안에 오도록 중심을 살짝 내립니다. */
-function topAlignRoute(pts, margin, sheetTop) {
-  if (!MAP.ready || !margin) return;
+function fitRoute(pts, d) {
+  if (!MAP.ready || !pts || !pts.length) return;
+  var wrap = el('mapWrap'), node = MAP.map.getNode();
+  if (!wrap || !node) return;
+  var H = wrap.clientHeight || 560, W = wrap.clientWidth || 420;
+  var CW = node.clientWidth, CH = node.clientHeight;
+  var k = CH / H;                                      /* 컨테이너 확대 배율 (보통 1.5) */
+  var vis = state.mapBig ? 0.92 : (VISIBLE_MAP[state.phase] || 0.4);
+  var visH = Math.max(140, Math.round(H * vis) - 8);    /* 화면에서 지도로 보이는 높이 (화면 px) */
+  var availW = Math.max(80, CW - 28 * k);
+  var availH = Math.max(80, visH * k - 24 * k);
+  /* 1) 지금 레벨에서 경로가 차지하는 픽셀로 필요한 배율을 구해 레벨 결정 (넘침 방지로 올림) */
+  var b0 = routeBoxPx(pts);
+  var scale = Math.min(availW / b0.w, availH / b0.h);
+  var lv = Math.ceil(MAP.map.getLevel() - Math.log(scale) / Math.LN2);
+  lv = Math.max(2, Math.min(9, lv));
+  if (lv !== MAP.map.getLevel()) { try { MAP.map.setLevel(lv); } catch (e) {} }
+  /* 2) 새 레벨에서 경로 중심이 시트 위 가시 영역 한가운데 오도록 중심 이동 */
+  var b1 = routeBoxPx(pts);
+  var pr = MAP.map.getProjection();
+  var cpt = pr.containerPointFromCoords(MAP.map.getCenter());
+  var target = new kakao.maps.Point(CW / 2, (CH - H) / 2 + (visH * k) / 2);
   try {
-    var pr = MAP.map.getProjection();
-    var minY = 1e9, maxY = -1e9;
-    var all = [[PICKUP.lat, PICKUP.lng]].concat(pts);
-    for (var i = 0; i < all.length; i++) {
-      var p = pr.containerPointFromCoords(ll(all[i][0], all[i][1]));
-      if (p.y < minY) minY = p.y;
-      if (p.y > maxY) maxY = p.y;
-    }
-    var sheetTopPx = sheetTop || (MAP.map.getNode().clientHeight * 0.6);
-    var room = sheetTopPx - 16 - maxY;              /* 아래로 더 내릴 수 있는 여유 */
-    var want = margin - minY;
-    var dy = Math.max(0, Math.min(want, room));
-    if (dy < 1) return;
-    var ctr = MAP.map.getCenter();
-    var pc = pr.containerPointFromCoords(ctr);
-    var tgt = pr.coordsFromContainerPoint(new kakao.maps.Point(pc.x, pc.y - dy));
-    MAP.map.setCenter(tgt);
-  } catch (e) {}
+    MAP.map.setCenter(pr.coordsFromContainerPoint(
+      new kakao.maps.Point(cpt.x + (b1.cx - target.x), cpt.y + (b1.cy - target.y))
+    ));
+  } catch (e2) {}
+  MAP.boundsK++;
+  syncZoomUi();
 }
 
 function fitPickup() {
@@ -709,13 +711,6 @@ function normDeg(d) { return ((d % 360) + 360) % 360; }
 function signedDeg(d) { return ((d % 360) + 540) % 360 - 180; }
 function isRotated() { return Math.abs(signedDeg(ROT.deg)) > 0.05; }
 function saveSoon() { clearTimeout(ROT.saveT); ROT.saveT = setTimeout(function () { save(); }, 400); }
-function mapScale() {
-  var n = (MAP.ready && MAP.map) ? MAP.map.getNode() : null;
-  var w = el('mapWrap');
-  if (!n || !w || !w.clientHeight) return 1;
-  return Math.max(1, n.clientHeight / w.clientHeight);
-}
-
 function updateRotUI() {
   var deg = Math.round(normDeg(ROT.deg)) % 360;
   var lab = el('rotLabel'); if (lab) lab.textContent = deg + '\u00b0';
