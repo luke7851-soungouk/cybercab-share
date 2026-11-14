@@ -929,24 +929,7 @@ function onTwistStart(e) {
     d0: d0, lv0: MAP.ready ? MAP.map.getLevel() : 5, ratio: 1, active: false
   };
 }
-function onTwistMove(e) {
-  if (!ROT.twist || !e.touches || e.touches.length < 2) return;
-  var t1 = e.touches[0], t2 = e.touches[1];
-  var a = pairAngle(t1, t2);
-  var da = signedDeg(a - ROT.twist.a0);
-  /* 0도에서 핀치만 할 때 손가락 떨림으로 미세 회전이 들어가 SDK 핀치를 끄지 않도록
-     살짤의 각도(4도)를 넘었을 때만 회전을 시작합니다. */
-  if (!ROT.twist.active) {
-    if (Math.abs(da) < 4) return;
-    ROT.twist.active = true;
-    ROT.twist.a0 = a;
-    ROT.twist.deg0 = ROT.deg;
-    da = 0;
-  }
-  applyRotation(ROT.twist.deg0 + da, true);
-  if (!isRotated() || !MAP.ready) return;
-  /* 손가락을 벌리면 확대, 오므리면 축소 — 회전 중에는 SDK 핀치가 꺼져 있어
-     CSS 배율로 부드럽게 보여 주고, 손을 띄면 실제 지도 레벨로 반영합니다. */
+function applyPinch(t1, t2) {
   var d = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
   if (!ROT.twist.scaling) {
     ROT.twist.scaling = true;
@@ -958,6 +941,29 @@ function onTwistMove(e) {
   ROT.twist.ratio = ratio;
   var box = el('kakaoMap');
   if (box) box.style.setProperty('--mscale', ratio.toFixed(3));
+}
+function onTwistMove(e) {
+  if (!ROT.twist || !e.touches || e.touches.length < 2) return;
+  var t1 = e.touches[0], t2 = e.touches[1];
+  var a = pairAngle(t1, t2);
+  var da = signedDeg(a - ROT.twist.a0);
+  /* 0도에서 핀치만 할 때 손가락 떨림으로 미세 회전이 들어가 SDK 핀치를 끄지 않도록
+     살짝의 각도(4도)를 넘었을 때만 회전을 시작합니다. */
+  if (!ROT.twist.active) {
+    if (Math.abs(da) < 4) {
+      if (MAP.ready && isRotated()) applyPinch(t1, t2);   /* 회전 중이면 벌리기/오므리기는 직접 */
+      return;
+    }
+    ROT.twist.active = true;
+    ROT.twist.a0 = a;
+    ROT.twist.deg0 = ROT.deg;
+    da = 0;
+  }
+  applyRotation(ROT.twist.deg0 + da, true);
+  if (!MAP.ready || !isRotated()) return;
+  /* 손가락을 벌리면 확대, 오므리면 축소 — 회전 중에는 SDK 핀치가 꺼져 있어
+     CSS 배율로 부드럽게 보여 주고, 손을 띄면 실제 지도 레벨로 반영합니다. */
+  applyPinch(t1, t2);
 }
 function onTwistEnd(e) {
   if (e.touches && e.touches.length >= 2) return;
