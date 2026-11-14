@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#FFE812">
+<meta name="description" content="테슬라 사이버캡 유휴 시간 로보택시 공유 플랫폼 · 실제 카카오맵(부산 기장군 정관읍) 연동 데모">
+<meta name="color-scheme" content="light dark">
+<title>사이버캡 셰어 · 카카오맵 연동</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="mode-rider">
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M3.2 14.6h17.6" stroke="#191919" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M5 14.6c.2-2.2 1.5-3.6 3.4-4.1l2.3-.7c1-.3 2.1-.45 3.3-.45s2.3.15 3.3.45l2.3.7c1.9.5 3.2 1.9 3.4 4.1" stroke="#191919" stroke-width="1.8" stroke-linejoin="round"/>
+          <circle cx="7.8" cy="16.8" r="1.5" stroke="#191919" stroke-width="1.5"/>
+          <circle cx="16.2" cy="16.8" r="1.5" stroke="#191919" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="bname">CYBERCAB</div>
+        <div class="bsub">SHARE</div>
+      </div>
+    </div>
+    <div class="modesw">
+      <button class="mtab on" data-mode="rider" onclick="setMode('rider')"><span data-ko="고객" data-en="Ride">고객</span></button>
+      <button class="mtab" data-mode="owner" onclick="setMode('owner')"><span data-ko="차주" data-en="Owner">차주</span></button>
+    </div>
+    <button class="langbtn" id="langBtn" onclick="toggleLang()">KO</button>
+  </header>
+
+  <div class="stage">
+
+    <!-- ================= RIDER ================= -->
+    <section id="riderView">
+      <div class="map" id="mapWrap">
+        <!-- 실제 카카오맵 SDK 컨테이너 -->
+        <div class="kakaomap" id="kakaoMap"></div>
+
+        <!-- 키 미설정·오류 안내 / 키 입력 패널 -->
+        <div class="mapkey" id="mapKey" hidden></div>
+
+        <div class="map-chip"><i></i>&nbsp;<span data-ko="현위치" data-en="Now">현위치</span>&nbsp;<span id="pickupName">정관읍 중앙공원</span></div>
+        <div class="map-live"><span class="live-dot"></span><span data-ko="운행 중" data-en="Live">운행 중</span> <b id="cabCount">5</b><span data-ko="대" data-en="">대</span></div>
+        <button class="mapexp" id="mapExpBtn" onclick="toggleMapBig()">
+          <span id="mapExpIcon"></span>
+          <span data-ko="크게 보기" data-en="Expand">크게 보기</span>
+        </button>
+        <button class="maptype" id="mapTypeBtn" onclick="toggleMapType()" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 8.5 9 5.5v10L3 18.5v-10ZM9 5.5l6 3v10l-6-3M15 8.5l6-3v10l-6 3" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+          <span id="mapTypeLabel">스카이뷰</span>
+        </button>
+        <div class="map-note" id="mapNote" hidden></div>
+      </div>
+
+      <div class="cabpop" id="cabPop" hidden></div>
+
+      <div class="sheet" id="sheet">
+        <div class="mapctl" id="mapCtl">
+          <button class="mbtn" id="zoomInBtn" onclick="zoomIn()" aria-label="확대">+</button>
+          <button class="mbtn" id="zoomOutBtn" onclick="zoomOut()" aria-label="축소">−</button>
+          <div class="zlab one" id="zoomLabel">1.0x</div>
+          <button class="mbtn" id="fabLoc" onclick="recenter()" aria-label="현위치">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.4" fill="#191919"/><circle cx="12" cy="12" r="7.6" stroke="#191919" stroke-width="1.6"/><path d="M12 1.8v2.6M12 19.6v2.6M1.8 12h2.6M19.6 12h2.6" stroke="#191919" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="grab" onclick="toggleSheet()"></div>
+        <div class="minirow" onclick="expandSheet()">
+          <b data-ko="정관읍 중앙공원" data-en="Jungang Park">정관읍 중앙공원</b>
+          <span data-ko="어디로 갈까요?" data-en="Where to?">어디로 갈까요?</span>
+        </div>
+        <div class="bigrow" id="bigRow">
+          <div class="br-ic">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 22s7-6.2 7-11.4A7 7 0 0 0 5 10.6C5 15.8 12 22 12 22Z" fill="#2C7BFF"/><circle cx="12" cy="10" r="2.6" fill="#fff"/></svg>
+          </div>
+          <div class="br-tx">
+            <div class="br-l"><i class="d1"></i><span id="bigFrom">정관읍 중앙공원</span></div>
+            <div class="br-l"><i class="d2"></i><span id="bigTo">어디로 갈까요?</span></div>
+          </div>
+          <button class="br-x" onclick="setMapBig(false)"><span data-ko="축소" data-en="Shrink">축소</span></button>
+        </div>
+        <div class="sheet-scroll" id="sheetScroll"><div id="sheetBody"></div></div>
+      </div>
+    </section>
+
+    <!-- ================= OWNER ================= -->
+    <section id="ownerView" hidden>
+      <div class="ocard">
+        <div class="ohead">
+          <div>
+            <div class="oname">Tesla Cybercab</div>
+            <div class="ometa">FSD v14.2 · <span data-ko="부산 12가 3456" data-en="Busan 12GA 3456">부산 12가 3456</span></div>
+          </div>
+          <div class="ring">
+            <svg viewBox="0 0 44 44" width="44" height="44">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="4"/>
+              <circle id="batteryArc" cx="22" cy="22" r="18" fill="none" stroke="#22E2A6" stroke-width="4" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="24.9" transform="rotate(-90 22 22)"/>
+            </svg>
+            <b id="batteryTxt">78%</b>
+          </div>
+        </div>
+        <div class="carvis" id="carVisual"></div>
+        <div class="ostatus">
+          <span class="opill on" id="drivePill" data-ko="수익 운행 ON" data-en="EARNING ON">수익 운행 ON</span>
+          <span class="oloc"><i></i><span data-ko="정관읍 · 중앙공원 인근" data-en="Jeonggwan · near Jungang Park">정관읍 · 중앙공원 인근</span></span>
+        </div>
+      </div>
+
+      <div class="ocard">
+        <div class="oswitch">
+          <div>
+            <div class="t" data-ko="수익 운행" data-en="Earning mode">수익 운행</div>
+            <div class="d" data-ko="유휴 시간에 자동 배차합니다. 언제든 끌 수 있습니다." data-en="Auto-dispatch while idle. Turn off anytime.">유휴 시간에 자동 배차합니다. 언제든 끌 수 있습니다.</div>
+          </div>
+          <div class="sw on" id="driveSwitch" onclick="toggleDispatch()"></div>
+        </div>
+        <div class="oswitch">
+          <div>
+            <div class="t" data-ko="무인 충전·세차 존 복귀" data-en="Auto return to charge">무인 충전·세차 존 복귀</div>
+            <div class="d" data-ko="운행 종료 시 슈퍼차저·세차 존을 거쳐 집으로 돌아옵니다." data-en="After the shift it charges, gets cleaned, then parks at home.">운행 종료 시 슈퍼차저·세차 존을 거쳐 집으로 돌아옵니다.</div>
+          </div>
+          <div class="sw on" id="returnSwitch" onclick="toggleReturn()"></div>
+        </div>
+      </div>
+
+      <div class="osect"><span data-ko="오늘 정산" data-en="TODAY'S EARNINGS">오늘 정산</span></div>
+      <div class="hero">
+        <div class="hlab" data-ko="차주 순수익 · 수수료 15% 제외" data-en="Owner net · after 15% fee">차주 순수익 · 수수료 15% 제외</div>
+        <div class="hval" id="dNet">₩46,750</div>
+        <div class="hsub" id="dMonth"></div>
+        <div class="hgrid">
+          <div class="hbox">
+            <span data-ko="승객 결제 총액" data-en="Gross fares">승객 결제 총액</span>
+            <b id="dGross">₩55,000</b>
+          </div>
+          <div class="hbox">
+            <span data-ko="플랫폼 수수료 15%" data-en="Platform fee 15%">플랫폼 수수료 15%</span>
+            <b id="dFee" style="color:#FF8A8E">-₩8,250</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="ocard">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+          <div style="font-size:12.5px;font-weight:800" data-ko="📋 오늘 운행" data-en="📋 Today's trips">📋 오늘 운행</div>
+          <div class="ochip" id="dTrips">3</div>
+        </div>
+        <div id="tripList"></div>
+      </div>
+
+      <div class="osect"><span data-ko="유휴 시간 스케줄" data-en="IDLE SCHEDULE">유휴 시간 스케줄</span></div>
+      <div class="ocard">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:12.5px;font-weight:800" data-ko="🕒 운행 시간대" data-en="🕒 Operating hours">🕒 운행 시간대</div>
+          <div style="font-size:10px;color:var(--ow-dim)" data-ko="차가 비어 있는 시간" data-en="when the car is free">차가 비어 있는 시간</div>
+        </div>
+        <div id="slotList"></div>
+        <div class="ohint" data-ko="설정한 시간대에만 승객을 태우고, 나머지 시간에는 집 주차장에 그대로 둡니다." data-en="It only takes riders inside these windows and stays parked otherwise.">설정한 시간대에만 승객을 태우고, 나머지 시간에는 집 주차장에 그대로 둡니다.</div>
+      </div>
+
+      <div class="osect"><span data-ko="안전 · 복귀 기준" data-en="SAFETY &amp; RETURN">안전 · 복귀 기준</span></div>
+      <div class="ocard">
+        <div class="osl">
+          <div class="oslt"><span data-ko="최소 배터리 복귀 기준" data-en="Min battery to return">최소 배터리 복귀 기준</span><span class="v" id="minBatteryVal">20%</span></div>
+          <input type="range" id="minBattery" min="10" max="50" step="5" value="20" oninput="setMinBattery(this.value)">
+          <div class="ohint" id="minBatteryHint"></div>
+        </div>
+        <div class="osl">
+          <div class="oslt"><span data-ko="운행 반경" data-en="Service radius">운행 반경</span><span class="v" id="radiusVal">15km</span></div>
+          <input type="range" id="radius" min="5" max="50" step="5" value="15" oninput="setRadius(this.value)">
+          <div class="ohint" id="radiusHint"></div>
+        </div>
+      </div>
+
+      <div class="ocard">
+        <div class="olive">
+          <div>
+            <div class="lmain" id="liveMain"></div>
+            <div class="lsub" id="liveSub"></div>
+          </div>
+          <div class="pdot" id="liveDot"></div>
+        </div>
+        <div id="ownerExtra"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="payModal" hidden onclick="modalBg(event)">
+  <div class="sheet2">
+    <h3 data-ko="결제 수단 선택" data-en="Payment method">결제 수단 선택</h3>
+    <div id="payList"></div>
+  </div>
+</div>
+
+<script src="routes.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
