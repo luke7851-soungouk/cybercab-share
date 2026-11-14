@@ -589,7 +589,32 @@ function fitRoute(pts, d) {
     try { MAP.map.setBounds(boundsOf(pts)); } catch (e2) {}
   }
   MAP.boundsK++;
+  topAlignRoute(pts, Math.min(44, Math.max(0, (h - bottom) * 0.16)), h - bottom);
   syncZoomUi();
+}
+
+/* setBounds 결과가 화면 맨 위에 붙는 경우가 있어, 경로가 위쪽 여백 안에 오도록 중심을 살짝 내립니다. */
+function topAlignRoute(pts, margin, sheetTop) {
+  if (!MAP.ready || !margin) return;
+  try {
+    var pr = MAP.map.getProjection();
+    var minY = 1e9, maxY = -1e9;
+    var all = [[PICKUP.lat, PICKUP.lng]].concat(pts);
+    for (var i = 0; i < all.length; i++) {
+      var p = pr.containerPointFromCoords(ll(all[i][0], all[i][1]));
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    var sheetTopPx = sheetTop || (MAP.map.getNode().clientHeight * 0.6);
+    var room = sheetTopPx - 16 - maxY;              /* 아래로 더 내릴 수 있는 여유 */
+    var want = margin - minY;
+    var dy = Math.max(0, Math.min(want, room));
+    if (dy < 1) return;
+    var ctr = MAP.map.getCenter();
+    var pc = pr.containerPointFromCoords(ctr);
+    var tgt = pr.coordsFromContainerPoint(new kakao.maps.Point(pc.x, pc.y - dy));
+    MAP.map.setCenter(tgt);
+  } catch (e) {}
 }
 
 function fitPickup() {
